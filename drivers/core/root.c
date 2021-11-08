@@ -1,17 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (c) 2013 Google, Inc
  *
  * (C) Copyright 2012
  * Pavel Herrmann <morpheus.ibis@gmail.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <errno.h>
 #include <fdtdec.h>
+#include <log.h>
 #include <malloc.h>
-#include <libfdt.h>
+#include <linux/libfdt.h>
+#include <dm/acpi.h>
 #include <dm/device.h>
 #include <dm/device-internal.h>
 #include <dm/lists.h>
@@ -26,11 +27,7 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-struct root_priv {
-	fdt_addr_t translation_offset;	/* optional translation offset */
-};
-
-static const struct driver_info root_info = {
+static struct driver_info root_info = {
 	.name		= "root_driver",
 };
 
@@ -53,23 +50,6 @@ void dm_fixup_for_gd_move(struct global_data *new_gd)
 	}
 }
 
-fdt_addr_t dm_get_translation_offset(void)
-{
-	struct udevice *root = dm_root();
-	struct root_priv *priv = dev_get_priv(root);
-
-	return priv->translation_offset;
-}
-
-void dm_set_translation_offset(fdt_addr_t offs)
-{
-	struct udevice *root = dm_root();
-	struct root_priv *priv = dev_get_priv(root);
-
-	priv->translation_offset = offs;
-}
-
-#if defined(CONFIG_NEEDS_MANUAL_RELOC)
 void fix_drivers(void)
 {
 	struct driver *drv =
@@ -80,7 +60,7 @@ void fix_drivers(void)
 	for (entry = drv; entry != drv + n_ents; entry++) {
 		if (entry->of_match)
 			entry->of_match = (const struct udevice_id *)
-				((u32)entry->of_match + gd->reloc_off);
+				((ulong)entry->of_match + gd->reloc_off);
 		if (entry->bind)
 			entry->bind += gd->reloc_off;
 		if (entry->probe)
@@ -148,8 +128,6 @@ void fix_devices(void)
 	}
 }
 
-#endif
-
 int dm_init(bool of_live)
 {
 	int ret;
@@ -160,21 +138,19 @@ int dm_init(bool of_live)
 	}
 	INIT_LIST_HEAD(&DM_UCLASS_ROOT_NON_CONST);
 
-#if defined(CONFIG_NEEDS_MANUAL_RELOC)
-	fix_drivers();
-	fix_uclass();
-	fix_devices();
-#endif
+	if (IS_ENABLED(CONFIG_NEEDS_MANUAL_RELOC)) {
+		fix_drivers();
+		fix_uclass();
+		fix_devices();
+	}
 
 	ret = device_bind_by_name(NULL, false, &root_info, &DM_ROOT_NON_CONST);
 	if (ret)
 		return ret;
 #if CONFIG_IS_ENABLED(OF_CONTROL)
-# if CONFIG_IS_ENABLED(OF_LIVE)
-	if (of_live)
-		DM_ROOT_NON_CONST->node = np_to_ofnode(gd->of_root);
+	if (CONFIG_IS_ENABLED(OF_LIVE) && of_live)
+		DM_ROOT_NON_CONST->node = np_to_ofnode(gd_of_root());
 	else
-#endif
 		DM_ROOT_NON_CONST->node = offset_to_ofnode(0);
 #endif
 	ret = device_probe(DM_ROOT_NON_CONST);
@@ -188,6 +164,7 @@ int dm_uninit(void)
 {
 	device_remove(dm_root(), DM_REMOVE_NORMAL);
 	device_unbind(dm_root());
+	gd->dm_root = NULL;
 
 	return 0;
 }
@@ -205,6 +182,17 @@ int dm_scan_platdata(bool pre_reloc_only)
 {
 	int ret;
 
+	if (CONFIG_IS_ENABLED(OF_PLATDATA)) {
+		struct driver_rt *dyn;
+		int n_ents;
+
+		n_ents = ll_entry_count(struct driver_info, driver_info);
+		dyn = calloc(n_ents, sizeof(struct driver_rt));
+		if (!dyn)
+			return -ENOMEM;
+		gd_set_dm_driver_rt(dyn);
+	}
+
 	ret = lists_bind_drivers(DM_ROOT_NON_CONST, pre_reloc_only);
 	if (ret == -ENOENT) {
 		dm_warn("Some drivers were not found\n");
@@ -214,7 +202,7 @@ int dm_scan_platdata(bool pre_reloc_only)
 	return ret;
 }
 
-#if CONFIG_IS_ENABLED(OF_LIVE)
+#if CONFIG_IS_ENABLED(OF_CONTROL) && !CONFIG_IS_ENABLED(OF_PLATDATA)
 static int dm_scan_fdt_live(struct udevice *parent,
 			    const struct device_node *node_parent,
 			    bool pre_reloc_only)
@@ -223,14 +211,13 @@ static int dm_scan_fdt_live(struct udevice *parent,
 	int ret = 0, err;
 
 	for (np = node_parent->child; np; np = np->sibling) {
-		if (pre_reloc_only &&
-		    !of_find_property(np, "u-boot,dm-pre-reloc", NULL))
-			continue;
+
 		if (!of_device_is_available(np)) {
 			pr_debug("   - ignoring disabled device\n");
 			continue;
 		}
-		err = lists_bind_fdt(parent, np_to_ofnode(np), NULL);
+		err = lists_bind_fdt(parent, np_to_ofnode(np), NULL,
+				     pre_reloc_only);
 		if (err && !ret) {
 			ret = err;
 			debug("%s: ret=%d\n", np->name, ret);
@@ -242,9 +229,7 @@ static int dm_scan_fdt_live(struct udevice *parent,
 
 	return ret;
 }
-#endif /* CONFIG_IS_ENABLED(OF_LIVE) */
 
-#if CONFIG_IS_ENABLED(OF_CONTROL) && !CONFIG_IS_ENABLED(OF_PLATDATA)
 /**
  * dm_scan_fdt_node() - Scan the device tree and bind drivers for a node
  *
@@ -266,18 +251,17 @@ static int dm_scan_fdt_node(struct udevice *parent, const void *blob,
 	for (offset = fdt_first_subnode(blob, offset);
 	     offset > 0;
 	     offset = fdt_next_subnode(blob, offset)) {
-		if (pre_reloc_only &&
-		    !dm_fdt_pre_reloc(blob, offset))
-			continue;
+		const char *node_name = fdt_get_name(blob, offset, NULL);
+
 		if (!fdtdec_get_is_enabled(blob, offset)) {
 			pr_debug("   - ignoring disabled device\n");
 			continue;
 		}
-		err = lists_bind_fdt(parent, offset_to_ofnode(offset), NULL);
+		err = lists_bind_fdt(parent, offset_to_ofnode(offset), NULL,
+				     pre_reloc_only);
 		if (err && !ret) {
 			ret = err;
-			debug("%s: ret=%d\n", fdt_get_name(blob, offset, NULL),
-			      ret);
+			debug("%s: ret=%d\n", node_name, ret);
 		}
 	}
 
@@ -292,57 +276,67 @@ int dm_scan_fdt_dev(struct udevice *dev)
 	if (!dev_of_valid(dev))
 		return 0;
 
-#if CONFIG_IS_ENABLED(OF_LIVE)
 	if (of_live_active())
 		return dm_scan_fdt_live(dev, dev_np(dev),
 				gd->flags & GD_FLG_RELOC ? false : true);
-	else
-#endif
+
 	return dm_scan_fdt_node(dev, gd->fdt_blob, dev_of_offset(dev),
 				gd->flags & GD_FLG_RELOC ? false : true);
 }
 
 int dm_scan_fdt(const void *blob, bool pre_reloc_only)
 {
-#if CONFIG_IS_ENABLED(OF_LIVE)
 	if (of_live_active())
-		return dm_scan_fdt_live(gd->dm_root, gd->of_root,
+		return dm_scan_fdt_live(gd->dm_root, gd_of_root(),
 					pre_reloc_only);
-	else
-#endif
+
 	return dm_scan_fdt_node(gd->dm_root, blob, 0, pre_reloc_only);
 }
-#else
-static int dm_scan_fdt_node(struct udevice *parent, const void *blob,
-			    int offset, bool pre_reloc_only)
+
+static int dm_scan_fdt_ofnode_path(const void *blob, const char *path,
+				   bool pre_reloc_only)
 {
-	return 0;
+	ofnode node;
+
+	node = ofnode_path(path);
+	if (!ofnode_valid(node))
+		return 0;
+
+	if (of_live_active())
+		return dm_scan_fdt_live(gd->dm_root, node.np, pre_reloc_only);
+
+	return dm_scan_fdt_node(gd->dm_root, blob, node.of_offset,
+				pre_reloc_only);
 }
-#endif
 
 int dm_extended_scan_fdt(const void *blob, bool pre_reloc_only)
 {
-	int node, ret;
+	int ret, i;
+	const char * const nodes[] = {
+		"/chosen",
+		"/clocks",
+		"/firmware"
+	};
 
-	ret = dm_scan_fdt(gd->fdt_blob, pre_reloc_only);
+	ret = dm_scan_fdt(blob, pre_reloc_only);
 	if (ret) {
 		debug("dm_scan_fdt() failed: %d\n", ret);
 		return ret;
 	}
 
-	/* bind fixed-clock */
-	node = ofnode_to_offset(ofnode_path("/clocks"));
-	/* if no DT "clocks" node, no need to go further */
-	if (node < 0)
-		return ret;
-
-	ret = dm_scan_fdt_node(gd->dm_root, gd->fdt_blob, node,
-			       pre_reloc_only);
-	if (ret)
-		debug("dm_scan_fdt_node() failed: %d\n", ret);
+	/* Some nodes aren't devices themselves but may contain some */
+	for (i = 0; i < ARRAY_SIZE(nodes); i++) {
+		ret = dm_scan_fdt_ofnode_path(blob, nodes[i], pre_reloc_only);
+		if (ret) {
+			debug("dm_scan_fdt() scan for %s failed: %d\n",
+			      nodes[i], ret);
+			return ret;
+		}
+	}
 
 	return ret;
 }
+#endif
 
 __weak int dm_scan_other(bool pre_reloc_only)
 {
@@ -353,7 +347,10 @@ int dm_init_and_scan(bool pre_reloc_only)
 {
 	int ret;
 
-	ret = dm_init(IS_ENABLED(CONFIG_OF_LIVE));
+	if (CONFIG_IS_ENABLED(OF_PLATDATA))
+		dm_populate_phandle_data();
+
+	ret = dm_init(CONFIG_IS_ENABLED(OF_LIVE));
 	if (ret) {
 		debug("dm_init() failed: %d\n", ret);
 		return ret;
@@ -379,11 +376,22 @@ int dm_init_and_scan(bool pre_reloc_only)
 	return 0;
 }
 
+#ifdef CONFIG_ACPIGEN
+static int root_acpi_get_name(const struct udevice *dev, char *out_name)
+{
+	return acpi_copy_name(out_name, "\\_SB");
+}
+
+struct acpi_ops root_acpi_ops = {
+	.get_name	= root_acpi_get_name,
+};
+#endif
+
 /* This is the root driver - all drivers are children of this */
 U_BOOT_DRIVER(root_driver) = {
 	.name	= "root_driver",
 	.id	= UCLASS_ROOT,
-	.priv_auto_alloc_size = sizeof(struct root_priv),
+	ACPI_OPS_PTR(&root_acpi_ops)
 };
 
 /* This is the root uclass */

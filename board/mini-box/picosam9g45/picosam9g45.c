@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Board functions for mini-box PICOSAM9G45 (AT91SAM9G45) based board
  * (C) Copyright 2015 Inter Act B.V.
@@ -7,11 +8,11 @@
  * (C) Copyright 2007-2008
  * Stelian Pop <stelian@popies.net>
  * Lead Tech Design <www.leadtechdesign.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
+#include <init.h>
+#include <vsprintf.h>
 #include <asm/io.h>
 #include <asm/arch/clk.h>
 #include <asm/arch/at91sam9g45_matrix.h>
@@ -237,7 +238,7 @@ void lcd_show_board_info(void)
 #endif
 
 #ifdef CONFIG_GENERIC_ATMEL_MCI
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	at91_mci_hw_init();
 
@@ -299,7 +300,7 @@ void reset_phy(void)
 }
 #endif
 
-int board_eth_init(bd_t *bis)
+int board_eth_init(struct bd_info *bis)
 {
 	int rc = 0;
 #ifdef CONFIG_MACB

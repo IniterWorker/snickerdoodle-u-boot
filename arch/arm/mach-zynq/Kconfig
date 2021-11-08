@@ -3,7 +3,7 @@ if ARCH_ZYNQ
 config SPL_LDSCRIPT
 	default "arch/arm/mach-zynq/u-boot-spl.lds"
 
-config SPL_FAT_SUPPORT
+config SPL_FS_FAT
 	default y
 
 config SPL_LIBCOMMON_SUPPORT
@@ -36,6 +36,7 @@ config ZYNQ_DDRC_INIT
 	  want to skip ddr init and this option is useful for it.
 
 config SYS_BOARD
+	string "Board name"
 	default "zynq"
 
 config SYS_VENDOR
@@ -54,7 +55,7 @@ config SYS_CONFIG_NAME
 	  will be used for board configuration.
 
 config SYS_MALLOC_F_LEN
-	default 0x600
+	default 0x800
 
 config SYS_MALLOC_LEN
 	default 0x1400000
@@ -66,18 +67,10 @@ config BOOT_INIT_FILE
 	  Add register writes to boot.bin format (max 256 pairs).
 	  Expect a table of register-value pairs, e.g. "0x12345678 0x4321"
 
-config ZYNQ_M29EW_WB_HACK
-	bool "Zynq NOR hack"
-	default n
-	help
-	  The option provides hack for Zynq NOR driver which is required
-	  for NOR operations to work as expected.
+config ZYNQ_SDHCI_MAX_FREQ
+	default 52000000
 
-# Temporary Kconfig options which needs to be fixed
-config SYS_I2C_MUX_ADDR
-	int
-
-config SYS_I2C_MUX_EEPROM_SEL
-	int
+source "board/xilinx/Kconfig"
+source "board/xilinx/zynq/Kconfig"
 
 endif

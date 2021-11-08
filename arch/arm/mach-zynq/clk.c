@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2013 Soren Brinkmann <soren.brinkmann@xilinx.com>
  * Copyright (C) 2013 Xilinx, Inc. All rights reserved.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 #include <clk.h>
 #include <common.h>
 #include <dm.h>
+#include <init.h>
+#include <malloc.h>
 #include <asm/arch/clk.h>
 
 DECLARE_GLOBAL_DATA_PTR;

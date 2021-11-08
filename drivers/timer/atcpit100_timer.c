@@ -1,18 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Andestech ATCPIT100 timer driver
  *
  * (C) Copyright 2016
  * Rick Chen, NDS32 Software Engineering, rick@andestech.com
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 #include <common.h>
 #include <dm.h>
 #include <errno.h>
 #include <timer.h>
 #include <linux/io.h>
-
-DECLARE_GLOBAL_DATA_PTR;
 
 #define REG32_TMR(x)	(*(u32 *)	((plat->regs) + (x>>2)))
 
@@ -71,13 +68,12 @@ struct atcpit_timer_platdata {
 	u32 *regs;
 };
 
-static int atcpit_timer_get_count(struct udevice *dev, u64 *count)
+static u64 atcpit_timer_get_count(struct udevice *dev)
 {
 	struct atcpit_timer_platdata *plat = dev_get_platdata(dev);
 	u32 val;
 	val = ~(REG32_TMR(CH_CNT(1))+0xffffffff);
-	*count = timer_conv_64(val);
-	return 0;
+	return timer_conv_64(val);
 }
 
 static int atcpit_timer_probe(struct udevice *dev)
@@ -92,7 +88,7 @@ static int atcpit_timer_probe(struct udevice *dev)
 static int atcpit_timer_ofdata_to_platdata(struct udevice *dev)
 {
 	struct atcpit_timer_platdata *plat = dev_get_platdata(dev);
-	plat->regs = map_physmem(devfdt_get_addr(dev) , 0x100 , MAP_NOCACHE);
+	plat->regs = map_physmem(dev_read_addr(dev), 0x100 , MAP_NOCACHE);
 	return 0;
 }
 
@@ -113,5 +109,4 @@ U_BOOT_DRIVER(atcpit100_timer) = {
 	.platdata_auto_alloc_size = sizeof(struct atcpit_timer_platdata),
 	.probe = atcpit_timer_probe,
 	.ops	= &atcpit_timer_ops,
-	.flags = DM_FLAG_PRE_RELOC,
 };

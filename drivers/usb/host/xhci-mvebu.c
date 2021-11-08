@@ -1,21 +1,19 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2015 Marvell International Ltd.
  *
  * MVEBU USB HOST xHCI Controller
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <dm.h>
 #include <fdtdec.h>
+#include <log.h>
 #include <usb.h>
 #include <power/regulator.h>
 #include <asm/gpio.h>
 
-#include "xhci.h"
-
-DECLARE_GLOBAL_DATA_PTR;
+#include <usb/xhci.h>
 
 struct mvebu_xhci_platdata {
 	fdt_addr_t hcd_base;
@@ -74,7 +72,7 @@ static int xhci_usb_ofdata_to_platdata(struct udevice *dev)
 	/*
 	 * Get the base address for XHCI controller from the device node
 	 */
-	plat->hcd_base = devfdt_get_addr(dev);
+	plat->hcd_base = dev_read_addr(dev);
 	if (plat->hcd_base == FDT_ADDR_T_NONE) {
 		debug("Can't get the XHCI register base address\n");
 		return -ENXIO;

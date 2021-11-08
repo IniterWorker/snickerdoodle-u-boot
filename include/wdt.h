@@ -1,11 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright 2017 Google, Inc
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef _WDT_H_
 #define _WDT_H_
+
+struct udevice;
 
 /*
  * Implement a simple watchdog uclass. Watchdog is basically a timer that
@@ -103,5 +104,7 @@ struct wdt_ops {
 	 */
 	int (*expire_now)(struct udevice *dev, ulong flags);
 };
+
+int initr_watchdog(void);
 
 #endif  /* _WDT_H_ */

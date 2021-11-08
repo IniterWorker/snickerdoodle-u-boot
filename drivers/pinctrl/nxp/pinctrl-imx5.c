@@ -1,8 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0+
 
 /*
  * Copyright (C) 2016 Peng Fan <van.freenix@gmail.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
@@ -11,7 +10,7 @@
 
 #include "pinctrl-imx.h"
 
-static struct imx_pinctrl_soc_info imx5_pinctrl_soc_info;
+static struct imx_pinctrl_soc_info imx5_pinctrl_soc_info __attribute__((section(".data")));
 
 static int imx5_pinctrl_probe(struct udevice *dev)
 {

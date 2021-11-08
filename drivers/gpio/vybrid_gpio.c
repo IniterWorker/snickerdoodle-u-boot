@@ -1,8 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2015
  * Bhuvanchandra DV, Toradex, Inc.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
@@ -110,7 +109,7 @@ static int vybrid_gpio_odata_to_platdata(struct udevice *dev)
 	struct vybrid_gpio_platdata *plat = dev_get_platdata(dev);
 	fdt_addr_t base_addr;
 
-	base_addr = devfdt_get_addr(dev);
+	base_addr = dev_read_addr(dev);
 	if (base_addr == FDT_ADDR_T_NONE)
 		return -EINVAL;
 

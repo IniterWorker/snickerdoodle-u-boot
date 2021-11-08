@@ -1,8 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * (C) Copyright 2015 Google, Inc
  * Written by Simon Glass <sjg@chromium.org>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <asm/global_data.h>
@@ -33,8 +32,7 @@ cpu_call32:
 	push	%rdi	/* 32-bit code segment */
 	lea	compat(%rip), %rax
 	push	%rax
-	.byte	0x48	/* REX prefix to force 64-bit far return */
-	retf
+	retfq
 .code32
 compat:
 	/*
@@ -61,4 +59,4 @@ compat:
 	/* Jump to the required target */
 	pushl	%edi	/* 32-bit code segment */
 	pushl	%esi	/* 32-bit target address */
-	retf
+	retfl
